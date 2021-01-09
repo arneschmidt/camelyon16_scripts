@@ -255,16 +255,16 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--image_dir", "-i", type=str, default="/home/arne/datasets/Camelyon16_dummy2/")
-    parser.add_argument("--val_split", "-vs", type=float, default=0.5)
+    parser.add_argument("--image_dir", "-i", type=str, default="/data/BasesDeDatos/CAMELYON16/")
+    parser.add_argument("--val_split", "-vs", type=float, default=0.2)
 
-    parser.add_argument("--output_dir", "-o", type=str, default="/home/arne/datasets/Camelyon16_dummy2/")
+    parser.add_argument("--output_dir", "-o", type=str, default="/work/Camelyon_MIL/")
     parser.add_argument("--number_wsi", "-n", type=str, default="all")
     parser.add_argument("--dataframes_only", "-do", action='store_true')
 
     parser.add_argument("--patch_overlap", "-po", action='store_true')
     parser.add_argument("--patch_resolution", "-pr", type=int, default=512)
-    parser.add_argument("--number_of_processes", "-np", type=int, default=1)
+    parser.add_argument("--number_of_processes", "-np", type=int, default=10)
     parser.add_argument("--debug", "-d", action='store_true')
     args = parser.parse_args()
     print('Arguments:')
