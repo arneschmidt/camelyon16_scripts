@@ -56,12 +56,12 @@ def get_wsi_data_splits(image_dir, val_split):
     wsi_data_split_lists['train'] = np.concatenate((wsi_list_train_normal, wsi_list_train_tumor))
     wsi_list_test_normal = np.array(glob.glob(str(image_dir) + "testing/normal/*.tif"))
     wsi_list_test_tumor = np.array(glob.glob(str(image_dir) + "testing/tumor/*.tif"))
-    wsi_data_split_lists['test'] = np.concatenate((wsi_list_test_normal, wsi_list_test_tumor))
+    wsi_data_split_lists['test'] = np.array(glob.glob(str(image_dir) + "testing/images/*.tif"))
 
     return wsi_data_split_lists
 
 
-def contains_tissue(patch, otsu_threshold, white_threshold=0.4, blurr_threshold=50, black_threshold=0.9, debug=False):
+def contains_tissue(patch, otsu_threshold, white_threshold=0.35, blurr_threshold=50, greyscale_threshold=0.1, debug=False):
     """
 
     :param patch:
@@ -72,13 +72,14 @@ def contains_tissue(patch, otsu_threshold, white_threshold=0.4, blurr_threshold=
     :param debug:
     :return:
     """
-    patch_gray = np.asarray(patch.convert('LA'))
+    patch_gray = np.asarray(patch.convert('LA'), dtype=np.int16)
+    patch_rgb = np.asarray(patch, dtype=np.int16)
     patch_tissue = patch_gray[:, :, 0] < otsu_threshold
     patch_tissue = ndimage.binary_dilation(patch_tissue, iterations=2)
     patch_tissue_percent = np.sum(patch_tissue) / patch_tissue.size
     patch_white = patch_tissue_percent < white_threshold
-    patch_non_black_percentage = np.sum(patch_gray[:,:,0] > 5) / patch_tissue.size
-    patch_black = patch_non_black_percentage < black_threshold
+    patch_coloured = np.sum(np.abs(patch_rgb[:, :, 0] - patch_gray[:,:,0]) > 20) / patch_tissue.size
+    patch_greyscale = patch_coloured < greyscale_threshold
 
     fm = cv2.Laplacian(patch_gray, cv2.CV_64F).var()
     patch_blurry = fm < blurr_threshold
@@ -87,9 +88,9 @@ def contains_tissue(patch, otsu_threshold, white_threshold=0.4, blurr_threshold=
         reason = reason + '-blurry'
     if patch_white:
         reason = reason + '-white'
-    if patch_black:
-        reason = reason + '-black'
-    if not (patch_white or patch_blurry or patch_black):
+    if patch_greyscale:
+        reason = reason + '-greyscale' + str(patch_coloured)
+    if not (patch_white or patch_blurry or patch_greyscale):
         return True
     elif debug:
         return reason
@@ -104,6 +105,19 @@ def get_otsu_threshold(wsi):
 
     return otsu_threshold
 
+def create_wsi_df(wsi_lists):
+    wsi_df = pd.DataFrame()
+    all_wsi_list = np.concatenate([wsi_lists['train'],wsi_lists['val'], wsi_lists['test']] )
+    wsi_df['slide'] = all_wsi_list
+    wsi_df['N'] = 0
+    wsi_df['P'] = 0
+    for i in range(len(all_wsi_list)):
+        wsi_df['slide'].iloc[i] = os.path.basename(all_wsi_list[i])
+        if 'normal' in all_wsi_list[i]:
+            wsi_df['N'].iloc[i] = 1
+        else:
+            wsi_df['P'].iloc[i] = 1
+    return wsi_df
 
 def init_patch_df(existing_patch_df = 'None'):
     if existing_patch_df == 'None':
@@ -138,7 +152,7 @@ def slice_image(wsi_path, args):
     patch_df = init_patch_df()
     for row in range(num_patches_per_row):
         if row % 10 == 0:
-            print('row ' + str(row))
+            print('row ' + str(row) + ' of ' + str(num_patches_per_row))
         for column in range(num_patches_per_column):
             if overlap:
                 start_y = int(row * (resolution / 2))
@@ -154,19 +168,20 @@ def slice_image(wsi_path, args):
                 if not dataframes_only:
                     patch.save(os.path.join(image_path, name+ '.jpg'))
             elif debug:
-                if contains_tissue(patch, otsu_threshold, white_threshold=0.2, blurr_threshold=30, black_threshold=0.99):
+                if contains_tissue(patch, otsu_threshold, white_threshold=0.2, blurr_threshold=30, greyscale_threshold=0.0):
                     reason = contains_tissue(patch, otsu_threshold, debug=True)
                     path = os.path.join(image_path,'deleted_patches')
                     os.makedirs(path, exist_ok=True)
                     patch.save(os.path.join(path, name + reason+ '.jpg'))
 
-    patch_df['image_name'] = names
+    patch_df['image_name'] = np.array(names)
     if negative_slide:
         patch_df['N'] = 1
         patch_df['P'] = 0
         patch_df['unlabeled'] = 0
     else:
         patch_df['N'] = 0
+        patch_df['P'] = 0
         patch_df['unlabeled'] = 1
     return patch_df
 
@@ -183,7 +198,7 @@ def run_with_multiprocessing(function, args, wsi_list):
     if number_of_processes == 1:
         for i in range(0, n_wsis):
             wsi_path = wsi_list[i]
-            print('Working on index ' + str(i) + ' of ' + str(n_wsis))
+            print('Working on wsi ' + str(i) + ' of ' + str(n_wsis))
             fn = function
             patch_df = fn(wsi_path, args)
             if len(patch_df) == 0:
@@ -216,8 +231,6 @@ def run_with_multiprocessing(function, args, wsi_list):
                     filtered_wsi.append(wsi_list[index])
                 df = pd.concat([df, patch_df])
 
-
-            df = pd.concat([df, df])
     return df, filtered_wsi
 
 def main(args):
@@ -232,6 +245,8 @@ def main(args):
         wsi_list = wsi_data_split_lists[mode]
         df, filtered_wsi = run_with_multiprocessing(slice_image, args, wsi_list)
         df.to_csv(os.path.join(args.output_dir,mode+ '.csv'), index=False)
+    wsi_df = create_wsi_df(wsi_data_split_lists)
+    wsi_df.to_csv(os.path.join(args.output_dir,'wsi_labels.csv'), index=False)
 
     if len(filtered_wsi) > 0:
         print('The following WSI have been filtered out completely because of whiteness or blur:')
@@ -240,16 +255,16 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--image_dir", "-i", type=str, default="/home/arne/datasets/Camelyon16_dummy/")
+    parser.add_argument("--image_dir", "-i", type=str, default="/home/arne/datasets/Camelyon16_dummy2/")
     parser.add_argument("--val_split", "-vs", type=float, default=0.5)
 
-    parser.add_argument("--output_dir", "-o", type=str, default="/home/arne/datasets/Camelyon16_dummy/")
+    parser.add_argument("--output_dir", "-o", type=str, default="/home/arne/datasets/Camelyon16_dummy2/")
     parser.add_argument("--number_wsi", "-n", type=str, default="all")
     parser.add_argument("--dataframes_only", "-do", action='store_true')
 
     parser.add_argument("--patch_overlap", "-po", action='store_true')
     parser.add_argument("--patch_resolution", "-pr", type=int, default=512)
-    parser.add_argument("--number_of_processes", "-np", type=int, default=2)
+    parser.add_argument("--number_of_processes", "-np", type=int, default=1)
     parser.add_argument("--debug", "-d", action='store_true')
     args = parser.parse_args()
     print('Arguments:')
