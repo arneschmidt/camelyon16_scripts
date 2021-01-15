@@ -127,13 +127,13 @@ def create_wsi_df(wsi_lists, test_wsi_df):
         elif 'test' in wsi_name:
             test_df_row = test_wsi_df[test_wsi_df[0] == wsi_name]
             if len(test_df_row) == 1:
-                test_class = test_df_row[1][0]
+                test_class = test_df_row.iloc[0,1]
                 if test_class == 'Normal':
                     wsi_df['N'].iloc[i] = 1
                 else:
                     wsi_df['P'].iloc[i] = 1
-            else:
-                raise Warning('Label for WSI ' + wsi_name + ' was not found!')
+        else:
+            raise Warning('Label for WSI ' + wsi_name + ' was not found!')
         wsi_name = wsi_name.split('_')[0] + wsi_name.split('_')[1]
         wsi_df['slide'].iloc[i] = wsi_name
     return wsi_df
