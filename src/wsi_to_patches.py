@@ -54,12 +54,16 @@ def get_wsi_data_splits(image_dir, val_split):
     wsi_list_train_normal = np.delete(wsi_list_train_normal, sample_ids_val_normal, axis=0)
     wsi_list_train_tumor = np.delete(wsi_list_train_tumor, sample_ids_val_tumor, axis=0)
     wsi_data_split_lists['train'] = np.concatenate((wsi_list_train_normal, wsi_list_train_tumor))
-    wsi_list_test_normal = np.array(glob.glob(str(image_dir) + "testing/normal/*.tif"))
-    wsi_list_test_tumor = np.array(glob.glob(str(image_dir) + "testing/tumor/*.tif"))
     wsi_data_split_lists['test'] = np.array(glob.glob(str(image_dir) + "testing/images/*.tif"))
+    test_wsi_df = pd.read_csv(str(image_dir) + "testing/reference.csv", header=None)
+    return wsi_data_split_lists, test_wsi_df
 
-    return wsi_data_split_lists
-
+def get_patch_class(patch_annotation):
+    tumor_percent = np.sum(patch_annotation / 255) / patch_annotation.size
+    if tumor_percent > 0.5:
+        return 1
+    else:
+        return 0
 
 def contains_tissue(patch, otsu_threshold, white_threshold=0.35, blurr_threshold=50, greyscale_threshold=0.1, debug=False):
     """
@@ -105,18 +109,26 @@ def get_otsu_threshold(wsi):
 
     return otsu_threshold
 
-def create_wsi_df(wsi_lists):
+def create_wsi_df(wsi_lists, test_wsi_df):
     wsi_df = pd.DataFrame()
     all_wsi_list = np.concatenate([wsi_lists['train'],wsi_lists['val'], wsi_lists['test']] )
     wsi_df['slide'] = all_wsi_list
     wsi_df['N'] = 0
     wsi_df['P'] = 0
     for i in range(len(all_wsi_list)):
-        wsi_df['slide'].iloc[i] = os.path.basename(all_wsi_list[i])
-        if 'normal' in all_wsi_list[i]:
+        wsi_name = os.path.basename(all_wsi_list[i]).split('.')[0]
+        if 'normal' in wsi_name:
             wsi_df['N'].iloc[i] = 1
-        else:
+        elif 'tumor' in all_wsi_list[i]:
             wsi_df['P'].iloc[i] = 1
+        else:
+            test_class = test_wsi_df[test_wsi_df[0] == wsi_name][1][0]
+            if test_class == 'Normal':
+                wsi_df['N'].iloc[i] = 1
+            else:
+                wsi_df['P'].iloc[i] = 1
+        wsi_name = wsi_name.split('_')[0] + wsi_name.split('_')[1]
+        wsi_df['slide'].iloc[i] = wsi_name
     return wsi_df
 
 def init_patch_df(existing_patch_df = 'None'):
@@ -126,7 +138,7 @@ def init_patch_df(existing_patch_df = 'None'):
         df = pd.read_excel(existing_patch_df)
     return df
 
-def slice_image(wsi_path, args):
+def slice_image(wsi_path, args, index, return_dict):
     resolution = args.patch_resolution
     overlap = args.patch_overlap
     output_dir = args.output_dir
@@ -135,9 +147,9 @@ def slice_image(wsi_path, args):
     image_path = os.path.join(output_dir, 'patches')
 
     wsi = read_tiff(wsi_path)
+
     level = 1
     wsi_name = os.path.basename(wsi_path).split('.')[0]
-    wsi_name = wsi_name.split('_')[0] + wsi_name.split('_')[1]
     w, h = wsi.dimensions
     if overlap:
         num_patches_per_row = int(2*np.floor((h/resolution)) - 1)
@@ -147,43 +159,71 @@ def slice_image(wsi_path, args):
         num_patches_per_column = int(np.floor((w / resolution)))
     otsu_threshold = get_otsu_threshold(wsi)
 
+    positive_slide = ('tumor' in wsi_name)
     negative_slide = ('normal' in wsi_name)
-    names = []
-    patch_df = init_patch_df()
-    for row in range(num_patches_per_row):
-        if row % 10 == 0:
-            print('row ' + str(row) + ' of ' + str(num_patches_per_row))
-        for column in range(num_patches_per_column):
-            if overlap:
-                start_y = int(row * (resolution / 2))
-                start_x = int(column * (resolution / 2))
-            else:
-                start_y = int(row*(resolution))
-                start_x = int(column*(resolution))
-            patch = wsi.read_region((start_y, start_x), level, (resolution, resolution))
-            patch = patch.convert("RGB")
-            name = wsi_name + '_' + str(row) + '_' + str(column)
-            if contains_tissue(patch, otsu_threshold):
-                names.append(name)
-                if not dataframes_only:
-                    patch.save(os.path.join(image_path, name+ '.jpg'))
-            elif debug:
-                if contains_tissue(patch, otsu_threshold, white_threshold=0.2, blurr_threshold=30, greyscale_threshold=0.0):
-                    reason = contains_tissue(patch, otsu_threshold, debug=True)
-                    path = os.path.join(image_path,'deleted_patches')
-                    os.makedirs(path, exist_ok=True)
-                    patch.save(os.path.join(path, name + reason+ '.jpg'))
+    test_slide = ('test' in wsi_name)
+    mask_too_big = False
+    wsi_mask = None
+    if positive_slide:
+        try:
+            mask_path = os.path.join(args.mask_dir, wsi_name+'_annotation_mask.png')
+            # wsi_mask = sld.open_slide(mask_path)
+            # wsi_mask = skimage.io.MultiImage(mask_path)[0]
+            # wsi_mask = cv2.imread(mask_path)
+            wsi_mask = np.asarray(Image.open(mask_path))
+            # wsi_mask = np.ones(shape=(10000, 10000))*255
+        except:
+            raise Warning('Annotation mask to big to load. wsi_mask: ' + wsi_name+'_annotation_mask.png')
+            mask_too_big = True
+    # take underscore out of wsi name
+    wsi_name = wsi_name.split('_')[0] + wsi_name.split('_')[1]
 
+    names = []
+    classes = []
+    if not mask_too_big:
+        patch_df = pd.DataFrame(columns=['image_name', 'N', 'P', 'unlabeled'])
+        for row in range(num_patches_per_row):
+            if row % 10 == 0:
+                print('row ' + str(row) + ' of ' + str(num_patches_per_row))
+            for column in range(num_patches_per_column):
+                if overlap:
+                    start_y = int(row * (resolution / 2))
+                    start_x = int(column * (resolution / 2))
+                else:
+                    start_y = int(row*(resolution))
+                    start_x = int(column*(resolution))
+                patch = wsi.read_region((start_y, start_x), level, (resolution, resolution))
+                patch = patch.convert("RGB")
+                name = wsi_name + '_' + str(row) + '_' + str(column)
+                if contains_tissue(patch, otsu_threshold):
+                    names.append(name)
+                    if not dataframes_only:
+                        patch.save(os.path.join(image_path, name+ '.jpg'))
+                    if positive_slide:
+                        patch_class = get_patch_class(wsi_mask[start_x:start_x+resolution,start_y:start_y+resolution])
+                        classes.append(patch_class)
+                elif debug:
+                    if contains_tissue(patch, otsu_threshold, white_threshold=0.2, blurr_threshold=30, greyscale_threshold=0.0):
+                        reason = contains_tissue(patch, otsu_threshold, debug=True)
+                        path = os.path.join(image_path,'deleted_patches')
+                        os.makedirs(path, exist_ok=True)
+                        patch.save(os.path.join(path, name + reason+ '.jpg'))
     patch_df['image_name'] = np.array(names)
     if negative_slide:
         patch_df['N'] = 1
         patch_df['P'] = 0
         patch_df['unlabeled'] = 0
-    else:
+    elif positive_slide:
+        assert len(classes) == len(names)
+        classes = np.array(classes)
+        patch_df['N'] = 1 - classes
+        patch_df['P'] = classes
+        patch_df['unlabeled'] = 0
+    elif test_slide:
         patch_df['N'] = 0
         patch_df['P'] = 0
         patch_df['unlabeled'] = 1
-    return patch_df
+    return_dict[index] = patch_df
 
 def read_tiff(path):
     image_slide = sld.open_slide(path)
@@ -192,24 +232,27 @@ def read_tiff(path):
 def run_with_multiprocessing(function, args, wsi_list):
     number_of_processes = args.number_of_processes
     n_wsis = len(wsi_list)
-    df = init_patch_df()
+    df = pd.DataFrame(columns=['image_name', 'N', 'P', 'unlabeled'])
     filtered_wsi = []
 
     if number_of_processes == 1:
         for i in range(0, n_wsis):
             wsi_path = wsi_list[i]
-            print('Working on wsi ' + str(i) + ' of ' + str(n_wsis))
+            print('Working on wsi ' + wsi_path + ' ' + str(i) + ' of ' + str(n_wsis))
             fn = function
-            patch_df = fn(wsi_path, args)
+            index = 0
+            return_dict = {}
+            fn(wsi_path, args, index, return_dict)
+            patch_df = return_dict[0]
             if len(patch_df) == 0:
                 print('All patches of the WSI have been filtered out. WSI:' + str(wsi_path))
                 filtered_wsi.append(wsi_path)
-            df = pd.concat([df, patch_df])
-
+            else:
+                df = pd.concat([df, patch_df])
     else:
         for i in range(0, n_wsis, number_of_processes):
             print(' Spawn new processes')
-            print('Working on index ' + str(i) + ' of ' + str(n_wsis))
+            print('Working on index ' + wsi_list[i] + ' ' + str(i) + ' of ' + str(n_wsis))
             manager = multiprocessing.Manager()
             return_dict = manager.dict()
             processes = []
@@ -219,7 +262,7 @@ def run_with_multiprocessing(function, args, wsi_list):
                     break
                 else:
                     wsi_path = wsi_list[index]
-                    p = multiprocessing.Process(target=function, args=(wsi_path, args))
+                    p = multiprocessing.Process(target=function, args=(wsi_path, args, index, return_dict))
                     processes.append(p)
                     p.start()
             for p in processes:
@@ -229,24 +272,27 @@ def run_with_multiprocessing(function, args, wsi_list):
                 if len(patch_df) == 0:
                     print('All patches of the WSI have been filtered out. WSI:' + str(wsi_list[index]))
                     filtered_wsi.append(wsi_list[index])
-                df = pd.concat([df, patch_df])
+                else:
+                    df = pd.concat([df, patch_df])
 
     return df, filtered_wsi
 
 def main(args):
-    wsi_data_split_lists = get_wsi_data_splits(args.image_dir, args.val_split)
+    Image.MAX_IMAGE_PIXELS = None
+    wsi_data_split_lists, test_wsi_df = get_wsi_data_splits(args.image_dir, args.val_split)
 
     os.makedirs(args.output_dir, exist_ok=True)
     patch_path = os.path.join(args.output_dir, 'patches')
     os.makedirs(patch_path, exist_ok=True)
 
+    wsi_df = create_wsi_df(wsi_data_split_lists, test_wsi_df)
+    wsi_df.to_csv(os.path.join(args.output_dir, 'wsi_labels.csv'), index=False)
     for mode in wsi_data_split_lists.keys():
         print('Process wsis for split ' + mode)
         wsi_list = wsi_data_split_lists[mode]
         df, filtered_wsi = run_with_multiprocessing(slice_image, args, wsi_list)
         df.to_csv(os.path.join(args.output_dir,mode+ '.csv'), index=False)
-    wsi_df = create_wsi_df(wsi_data_split_lists)
-    wsi_df.to_csv(os.path.join(args.output_dir,'wsi_labels.csv'), index=False)
+
 
     if len(filtered_wsi) > 0:
         print('The following WSI have been filtered out completely because of whiteness or blur:')
@@ -256,15 +302,19 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--image_dir", "-i", type=str, default="/data/BasesDeDatos/CAMELYON16/")
-    parser.add_argument("--val_split", "-vs", type=float, default=0.2)
+    # parser.add_argument("--image_dir", "-i", type=str, default="/home/arne/datasets/Camelyon16_dummy/")
+    parser.add_argument("--mask_dir", "-i", type=str, default="/data/BasesDeDatos/Camelyon/Camelyon16/training/annotation_masks/")
+    # parser.add_argument("--mask_dir", "-m", type=str, default="/home/arne/datasets/Camelyon16_dummy/training/annotation_masks/")
+    parser.add_argument("--val_split", "-vs", type=float, default=0.5)
 
     parser.add_argument("--output_dir", "-o", type=str, default="/work/Camelyon_MIL/")
+    # parser.add_argument("--output_dir", "-o", type=str, default="/home/arne/datasets/Camelyon16_dummy/patches/")
     parser.add_argument("--number_wsi", "-n", type=str, default="all")
     parser.add_argument("--dataframes_only", "-do", action='store_true')
 
     parser.add_argument("--patch_overlap", "-po", action='store_true')
     parser.add_argument("--patch_resolution", "-pr", type=int, default=512)
-    parser.add_argument("--number_of_processes", "-np", type=int, default=10)
+    parser.add_argument("--number_of_processes", "-np", type=int, default=1)
     parser.add_argument("--debug", "-d", action='store_true')
     args = parser.parse_args()
     print('Arguments:')
