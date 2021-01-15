@@ -303,7 +303,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--image_dir", "-i", type=str, default="/data/BasesDeDatos/CAMELYON16/")
     # parser.add_argument("--image_dir", "-i", type=str, default="/home/arne/datasets/Camelyon16_dummy/")
-    parser.add_argument("--mask_dir", "-i", type=str, default="/data/BasesDeDatos/Camelyon/Camelyon16/training/annotation_masks/")
+    parser.add_argument("--mask_dir", "-m", type=str, default="/data/BasesDeDatos/Camelyon/Camelyon16/training/annotation_masks/")
     # parser.add_argument("--mask_dir", "-m", type=str, default="/home/arne/datasets/Camelyon16_dummy/training/annotation_masks/")
     parser.add_argument("--val_split", "-vs", type=float, default=0.5)
 
