@@ -55,7 +55,10 @@ def get_wsi_data_splits(image_dir, val_split):
     wsi_list_train_tumor = np.delete(wsi_list_train_tumor, sample_ids_val_tumor, axis=0)
     wsi_data_split_lists['train'] = np.concatenate((wsi_list_train_normal, wsi_list_train_tumor))
     wsi_data_split_lists['test'] = np.array(glob.glob(str(image_dir) + "testing/images/*.tif"))
-    test_wsi_df = pd.read_csv(str(image_dir) + "testing/reference.csv", header=None)
+    wsi_df_path = str(image_dir) + "testing/reference.csv"
+    print('read wsi_df from ' + wsi_df_path)
+    test_wsi_df = pd.read_csv(wsi_df_path, header=None)
+    print(test_wsi_df)
     return wsi_data_split_lists, test_wsi_df
 
 def get_patch_class(patch_annotation):
