@@ -122,14 +122,18 @@ def create_wsi_df(wsi_lists, test_wsi_df):
         wsi_name = os.path.basename(all_wsi_list[i]).split('.')[0]
         if 'normal' in wsi_name:
             wsi_df['N'].iloc[i] = 1
-        elif 'tumor' in all_wsi_list[i]:
+        elif 'tumor' in wsi_name:
             wsi_df['P'].iloc[i] = 1
-        else:
-            test_class = test_wsi_df[test_wsi_df[0] == wsi_name][1][0]
-            if test_class == 'Normal':
-                wsi_df['N'].iloc[i] = 1
+        elif 'test' in wsi_name:
+            test_df_row = test_wsi_df[test_wsi_df[0] == wsi_name]
+            if len(test_df_row) == 1:
+                test_class = test_df_row[1][0]
+                if test_class == 'Normal':
+                    wsi_df['N'].iloc[i] = 1
+                else:
+                    wsi_df['P'].iloc[i] = 1
             else:
-                wsi_df['P'].iloc[i] = 1
+                raise Warning('Label for WSI ' + wsi_name + ' was not found!')
         wsi_name = wsi_name.split('_')[0] + wsi_name.split('_')[1]
         wsi_df['slide'].iloc[i] = wsi_name
     return wsi_df
