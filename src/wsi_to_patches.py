@@ -151,7 +151,7 @@ def slice_image(wsi_path, args, index, return_dict):
     output_dir = args.output_dir
     dataframes_only = args.dataframes_only
     debug = args.debug
-    image_path = os.path.join(output_dir, 'patches')
+    image_path = os.path.join(output_dir, 'images')
 
     wsi = read_tiff(wsi_path)
 
@@ -201,11 +201,11 @@ def slice_image(wsi_path, args, index, return_dict):
                     start_x = int(column*(resolution))
                 patch = wsi.read_region((start_y, start_x), level, (resolution, resolution))
                 patch = patch.convert("RGB")
-                name = wsi_name + '_' + str(row) + '_' + str(column)
+                name = wsi_name + '_' + str(row) + '_' + str(column) + '.jpg'
                 if contains_tissue(patch, otsu_threshold):
                     names.append(name)
                     if not dataframes_only:
-                        patch.save(os.path.join(image_path, name+ '.jpg'))
+                        patch.save(os.path.join(image_path, name))
                     if positive_slide:
                         patch_class = get_patch_class(wsi_mask[start_x:start_x+resolution,start_y:start_y+resolution])
                         classes.append(patch_class)
@@ -312,7 +312,7 @@ if __name__ == "__main__":
     # parser.add_argument("--image_dir", "-i", type=str, default="/home/arne/datasets/Camelyon16_dummy/")
     parser.add_argument("--mask_dir", "-m", type=str, default="/data/BasesDeDatos/Camelyon/Camelyon16/training/annotation_masks/")
     # parser.add_argument("--mask_dir", "-m", type=str, default="/home/arne/datasets/Camelyon16_dummy/training/annotation_masks/")
-    parser.add_argument("--val_split", "-vs", type=float, default=0.5)
+    parser.add_argument("--val_split", "-vs", type=float, default=0.2)
 
     parser.add_argument("--output_dir", "-o", type=str, default="/work/Camelyon_MIL/")
     # parser.add_argument("--output_dir", "-o", type=str, default="/home/arne/datasets/Camelyon16_dummy/patches/")
