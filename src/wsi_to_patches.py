@@ -327,7 +327,7 @@ if __name__ == "__main__":
     # parser.add_argument("--mask_dir", "-m", type=str, default="/home/arne/datasets/Camelyon16_dummy/training/annotation_masks/")
     parser.add_argument("--val_split", "-vs", type=float, default=0.2)
 
-    parser.add_argument("--output_dir", "-o", type=str, default="/work/Camelyon_MIL/")
+    parser.add_argument("--output_dir", "-o", type=str, default="/work/Camelyon16_MIL/")
     # parser.add_argument("--output_dir", "-o", type=str, default="/home/arne/datasets/Camelyon16_dummy/patches/")
     parser.add_argument("--number_wsi", "-n", type=str, default="all")
     parser.add_argument("--dataframes_only", "-do", action='store_true')
