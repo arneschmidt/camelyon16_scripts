@@ -68,24 +68,32 @@ def get_patch_class(patch_annotation):
     else:
         return 0
 
-def contains_tissue(patch, otsu_threshold, white_threshold=0.35, blurr_threshold=50, greyscale_threshold=0.1, debug=False):
+def contains_tissue(patch, otsu_threshold, white_threshold=0.2, blurr_threshold=50, greyscale_threshold=0.1, debug=False):
     """
 
     :param patch:
     :param otsu_threshold:
     :param white_threshold: percentage that must NOT be white to return True
     :param blurr_threshold:
-    :param black_threshold: percentage that must NOT be black to return True
+    :param black_threshold: percentage that must NOT be black/white/grey to return True
     :param debug:
     :return:
     """
     patch_gray = np.asarray(patch.convert('LA'), dtype=np.int16)
     patch_rgb = np.asarray(patch, dtype=np.int16)
-    patch_tissue = patch_gray[:, :, 0] < otsu_threshold
-    patch_tissue = ndimage.binary_dilation(patch_tissue, iterations=2)
-    patch_tissue_percent = np.sum(patch_tissue) / patch_tissue.size
+    # patch_tissue = patch_gray[:, :, 0] < otsu_threshold
+    # patch_tissue = ndimage.binary_dilation(patch_tissue, iterations=2)
+    # patch_tissue_percent = np.sum(patch_tissue) / patch_tissue.size
+    #
+    colour_threshold = 230
+    white = (255, 255, 255)
+    grey = (colour_threshold, colour_threshold, colour_threshold)
+    mask = cv2.inRange(patch_rgb, grey, white)
+    white_pixels = np.sum(mask==255)
+    patch_tissue_percent = (mask.size - white_pixels) / mask.size
     patch_white = patch_tissue_percent < white_threshold
-    patch_coloured = np.sum(np.abs(patch_rgb[:, :, 0] - patch_gray[:,:,0]) > 20) / patch_tissue.size
+
+    patch_coloured = np.sum(np.abs(patch_rgb[:, :, 0] - patch_gray[:,:,0]) > 15) / mask.size
     patch_greyscale = patch_coloured < greyscale_threshold
 
     fm = cv2.Laplacian(patch_gray, cv2.CV_64F).var()
@@ -180,8 +188,8 @@ def slice_image(wsi_path, args, index, return_dict):
             wsi_mask = np.asarray(Image.open(mask_path))
             # wsi_mask = np.ones(shape=(10000, 10000))*255
         except:
-            raise Warning('Annotation mask to big to load. wsi_mask: ' + wsi_name+'_annotation_mask.png')
             mask_too_big = True
+            print('Annotation mask to big to load. wsi_mask: ' + wsi_name+'_annotation_mask.png')
     # take underscore out of wsi name
     wsi_name = wsi_name.split('_')[0] + wsi_name.split('_')[1]
 
@@ -190,7 +198,7 @@ def slice_image(wsi_path, args, index, return_dict):
     if not mask_too_big:
         patch_df = pd.DataFrame(columns=['image_name', 'N', 'P', 'unlabeled'])
         for row in range(num_patches_per_row):
-            if row % 10 == 0:
+            if row % 10 == 0 and args.debug:
                 print('row ' + str(row) + ' of ' + str(num_patches_per_row))
             for column in range(num_patches_per_column):
                 if overlap:
@@ -199,22 +207,26 @@ def slice_image(wsi_path, args, index, return_dict):
                 else:
                     start_y = int(row*(resolution))
                     start_x = int(column*(resolution))
-                patch = wsi.read_region((start_y, start_x), level, (resolution, resolution))
+                # the coordinates at level 1 have to be multiplied by 2, else we get an overlap
+                patch = wsi.read_region((start_y*2, start_x*2), level, (resolution, resolution))
                 patch = patch.convert("RGB")
                 name = wsi_name + '_' + str(row) + '_' + str(column) + '.jpg'
-                if contains_tissue(patch, otsu_threshold):
+                if positive_slide:
+                    patch_class = get_patch_class(wsi_mask[start_x:start_x + resolution, start_y:start_y + resolution])
+                else:
+                    patch_class = 0
+                if contains_tissue(patch, otsu_threshold) or patch_class > 0:
                     names.append(name)
                     if not dataframes_only:
                         patch.save(os.path.join(image_path, name))
                     if positive_slide:
-                        patch_class = get_patch_class(wsi_mask[start_x:start_x+resolution,start_y:start_y+resolution])
                         classes.append(patch_class)
                 elif debug:
-                    if contains_tissue(patch, otsu_threshold, white_threshold=0.2, blurr_threshold=30, greyscale_threshold=0.0):
+                    if contains_tissue(patch, otsu_threshold, white_threshold=0.1, blurr_threshold=10, greyscale_threshold=0.0):
                         reason = contains_tissue(patch, otsu_threshold, debug=True)
                         path = os.path.join(image_path,'deleted_patches')
                         os.makedirs(path, exist_ok=True)
-                        patch.save(os.path.join(path, name + reason+ '.jpg'))
+                        patch.save(os.path.join(path, reason + name))
     patch_df['image_name'] = np.array(names)
     if negative_slide:
         patch_df['N'] = 1
@@ -259,12 +271,13 @@ def run_with_multiprocessing(function, args, wsi_list):
     else:
         for i in range(0, n_wsis, number_of_processes):
             print(' Spawn new processes')
-            print('Working on index ' + wsi_list[i] + ' ' + str(i) + ' of ' + str(n_wsis))
             manager = multiprocessing.Manager()
             return_dict = manager.dict()
             processes = []
             for j in range(number_of_processes):
                 index = i + j
+                print('Working on WSI ' + wsi_list[index] + ' ' + str(index) + ' of ' + str(n_wsis))
+
                 if index == len(wsi_list):
                     break
                 else:
@@ -289,7 +302,7 @@ def main(args):
     wsi_data_split_lists, test_wsi_df = get_wsi_data_splits(args.image_dir, args.val_split)
 
     os.makedirs(args.output_dir, exist_ok=True)
-    patch_path = os.path.join(args.output_dir, 'patches')
+    patch_path = os.path.join(args.output_dir, 'images')
     os.makedirs(patch_path, exist_ok=True)
 
     wsi_df = create_wsi_df(wsi_data_split_lists, test_wsi_df)
