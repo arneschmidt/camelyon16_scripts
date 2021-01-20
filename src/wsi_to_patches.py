@@ -62,7 +62,7 @@ def get_wsi_data_splits(image_dir, val_split):
     return wsi_data_split_lists, test_wsi_df
 
 def get_patch_class(patch_annotation):
-    tumor_percent = np.sum(patch_annotation / 255) / patch_annotation.size
+    tumor_percent = np.sum(patch_annotation.astype(float) / 255.) / patch_annotation.size
     if tumor_percent > 0.5:
         return 1
     else:
@@ -276,11 +276,11 @@ def run_with_multiprocessing(function, args, wsi_list):
             processes = []
             for j in range(number_of_processes):
                 index = i + j
-                print('Working on WSI ' + wsi_list[index] + ' ' + str(index) + ' of ' + str(n_wsis))
 
                 if index == len(wsi_list):
                     break
                 else:
+                    print('Working on WSI ' + wsi_list[index] + ' ' + str(index) + ' of ' + str(n_wsis))
                     wsi_path = wsi_list[index]
                     p = multiprocessing.Process(target=function, args=(wsi_path, args, index, return_dict))
                     processes.append(p)
