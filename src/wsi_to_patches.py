@@ -63,7 +63,7 @@ def get_wsi_data_splits(image_dir, val_split):
 
 def get_patch_class(patch_annotation, tumor_threshold):
     tumor_percent = np.sum(patch_annotation.astype(float) / 255.) / patch_annotation.size
-    if tumor_percent > 0.5:
+    if tumor_percent > tumor_threshold:
         return 1
     else:
         return 0
@@ -305,7 +305,7 @@ def main(args):
     patch_path = os.path.join(args.output_dir, 'images')
     os.makedirs(patch_path, exist_ok=True)
 
-    wsi_df = create_wsi_df(wsi_data_split_lists, test_wsi_df)
+    wsi_df = create_wsi_df(wsi_data_split_lists, test_wsi_df).drop_duplicates()
     wsi_df.to_csv(os.path.join(args.output_dir, 'wsi_labels.csv'), index=False)
     for mode in wsi_data_split_lists.keys():
         print('Process wsis for split ' + mode)
@@ -334,7 +334,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--patch_overlap", "-po", action='store_true')
     parser.add_argument("--patch_resolution", "-pr", type=int, default=512)
-    parser.add_argument("--tumor_threshold", "-tt", type=float, default=0.2)
+    parser.add_argument("--tumor_threshold", "-tt", type=float, default=0.05)
     parser.add_argument("--number_of_processes", "-np", type=int, default=1)
     parser.add_argument("--debug", "-d", action='store_true')
     args = parser.parse_args()
