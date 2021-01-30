@@ -165,7 +165,7 @@ def slice_image(wsi_path, args, index, return_dict):
 
     level = 1
     wsi_name = os.path.basename(wsi_path).split('.')[0]
-    w, h = wsi.dimensions
+    w, h = wsi.level_dimensions[1]
     if overlap:
         num_patches_per_row = int(2*np.floor((h/resolution)) - 1)
         num_patches_per_column = int(2*np.floor((w/resolution)) - 1)
@@ -185,11 +185,16 @@ def slice_image(wsi_path, args, index, return_dict):
             # wsi_mask = sld.open_slide(mask_path)
             # wsi_mask = skimage.io.MultiImage(mask_path)[0]
             # wsi_mask = cv2.imread(mask_path)
-            wsi_mask = np.asarray(Image.open(mask_path))
+            wsi_mask = Image.open(mask_path)
+            if wsi_mask.size[0] != w or wsi_mask.size[1] == h:
+                print('Image size: ' + str(w) + ', ' + str(h))
+                raise Warning('Mask size is different: ' + str(wsi_mask.size[0])+', ' + str(wsi_mask.size[1]))
+            wsi_mask = wsi_mask.resize(w, h)
+            wsi_mask = np.asarray(wsi_mask)
             # wsi_mask = np.ones(shape=(10000, 10000))*255
         except:
             mask_too_big = True
-            print('Annotation mask to big to load. wsi_mask: ' + wsi_name+'_annotation_mask.png')
+            print('Failed to load wsi mask. wsi_mask: ' + wsi_name+'_annotation_mask.png')
     # take underscore out of wsi name
     wsi_name = wsi_name.split('_')[0] + wsi_name.split('_')[1]
 
