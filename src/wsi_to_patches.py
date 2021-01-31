@@ -62,7 +62,8 @@ def get_wsi_data_splits(image_dir, val_split):
     return wsi_data_split_lists, test_wsi_df
 
 def get_patch_class(patch_annotation, tumor_threshold):
-    assert patch_annotation.size > 0
+    if not patch_annotation.size > 0:
+        print('No mask obtained for tissue! patch_annotation.size: ' + str(patch_annotation.size))
     tumor_percent = np.sum(patch_annotation.astype(float) / 255.) / patch_annotation.size
     if tumor_percent > tumor_threshold:
         return 1
@@ -220,7 +221,7 @@ def slice_image(wsi_path, args, index, return_dict):
                 patch = patch.convert("RGB")
                 name = wsi_name + '_' + str(row) + '_' + str(column) + '.jpg'
                 if positive_slide:
-                    patch_class = get_patch_class(wsi_mask[start_x:start_x + resolution, start_y:start_y + resolution], args.tumor_threshold)
+                    patch_class = get_patch_class(wsi_mask[start_y:start_y + resolution, start_x:start_x + resolution], args.tumor_threshold)
                 else:
                     patch_class = 0
                 if contains_tissue(patch, otsu_threshold) or patch_class > 0:
