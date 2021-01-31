@@ -188,7 +188,7 @@ def slice_image(wsi_path, args, index, return_dict):
             wsi_mask = Image.open(mask_path)
             if wsi_mask.size[0] != w or wsi_mask.size[1] == h:
                 print('Image size: ' + str(w) + ', ' + str(h))
-                raise Warning('Mask size is different: ' + str(wsi_mask.size[0])+', ' + str(wsi_mask.size[1]))
+                print('Mask size is different: ' + str(wsi_mask.size[0])+', ' + str(wsi_mask.size[1]))
             wsi_mask = wsi_mask.resize((w, h), Image.ANTIALIAS)
             wsi_mask = np.asarray(wsi_mask)
             # wsi_mask = np.ones(shape=(10000, 10000))*255
