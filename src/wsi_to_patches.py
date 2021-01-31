@@ -168,6 +168,9 @@ def slice_image(wsi_path, args, index, return_dict):
     level = 1
     wsi_name = os.path.basename(wsi_path).split('.')[0]
     w, h = wsi.level_dimensions[1]
+    print(wsi_name + ' size original: w=' + str(wsi.level_dimensions[0][0]) + ', h=' + str(wsi.level_dimensions[0][1])
+                                      + '  \t level 1 size: w='  + str(w) + ', h=' + str(h))
+
     if overlap:
         num_patches_per_row = int(2*np.floor((h/resolution)) - 1)
         num_patches_per_column = int(2*np.floor((w/resolution)) - 1)
@@ -188,18 +191,13 @@ def slice_image(wsi_path, args, index, return_dict):
             # wsi_mask = skimage.io.MultiImage(mask_path)[0]
             # wsi_mask = cv2.imread(mask_path)
             wsi_mask = Image.open(mask_path)
+            print(wsi_name + ' mask shape:' + str(wsi_mask.shape[0]) + ' ' + str(wsi_mask.shape[1]))
             if int(wsi_mask.size[0]) != int(w*2) or int(wsi_mask.size[1]) != int(h*2):
                 print('Different size before resizing!')
                 print('Image size: ' + str(w) + ', ' + str(h))
                 print('Mask size is different: ' + str(wsi_mask.size[0])+', ' + str(wsi_mask.size[1]))
-            # wsi_mask = wsi_mask.resize((w, h), Image.NEAREST)
             wsi_mask = np.asarray(wsi_mask)
-            # wsi_mask = cv2.resize(wsi_mask, dsize=(w, h), interpolation=cv2.INTER_NEAREST)
-            # if wsi_mask.size[0] != w or wsi_mask.size[1] != h:
-            #     print('Different size after resizing!')
-            #     print('Image size: ' + str(w) + ', ' + str(h))
-            #     print('Mask size is different: ' + str(wsi_mask.size[0])+', ' + str(wsi_mask.size[1]))
-            # wsi_mask = np.ones(shape=(10000, 10000))*255
+
         except Exception as inst:
             mask_too_big = True
             print('Failed to load wsi mask. wsi_mask: ' + wsi_name+'_annotation_mask.png')
@@ -222,8 +220,8 @@ def slice_image(wsi_path, args, index, return_dict):
                     start_y = int(row*(resolution))
                     start_x = int(column*(resolution))
                 # the coordinates at level 1 have to be multiplied by 2, else we get an overlap
-                assert start_x + resolution <= w # and start_x + resolution <= wsi_mask.size[0]
-                assert start_y + resolution <= h # and start_y + resolution <= wsi_mask.size[1]
+                assert start_x + resolution <= w
+                assert start_y + resolution <= h
                 patch = wsi.read_region((start_x*2, start_y*2), level, (resolution, resolution))
                 patch = patch.convert("RGB")
                 name = wsi_name + '_' + str(row) + '_' + str(column) + '.jpg'
