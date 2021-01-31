@@ -188,12 +188,13 @@ def slice_image(wsi_path, args, index, return_dict):
             # wsi_mask = skimage.io.MultiImage(mask_path)[0]
             # wsi_mask = cv2.imread(mask_path)
             wsi_mask = Image.open(mask_path)
-            if wsi_mask.size[0] != w*2 or wsi_mask.size[1] == h*2:
+            if int(wsi_mask.size[0]) != int(w*2) or int(wsi_mask.size[1]) == int(h*2):
                 print('Different size before resizing!')
                 print('Image size: ' + str(w) + ', ' + str(h))
                 print('Mask size is different: ' + str(wsi_mask.size[0])+', ' + str(wsi_mask.size[1]))
-            wsi_mask = wsi_mask.resize((w, h), Image.NEAREST)
+            # wsi_mask = wsi_mask.resize((w, h), Image.NEAREST)
             wsi_mask = np.asarray(wsi_mask)
+            wsi_mask = cv2.resize(wsi_mask, dsize=(w, h), interpolation=cv2.INTER_NEAREST)
             if wsi_mask.size[0] != w or wsi_mask.size[1] == h:
                 print('Different size after resizing!')
                 print('Image size: ' + str(w) + ', ' + str(h))
