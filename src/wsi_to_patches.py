@@ -188,21 +188,22 @@ def slice_image(wsi_path, args, index, return_dict):
             # wsi_mask = skimage.io.MultiImage(mask_path)[0]
             # wsi_mask = cv2.imread(mask_path)
             wsi_mask = Image.open(mask_path)
-            if int(wsi_mask.size[0]) != int(w*2) or int(wsi_mask.size[1]) == int(h*2):
+            if int(wsi_mask.size[0]) != int(w*2) or int(wsi_mask.size[1]) != int(h*2):
                 print('Different size before resizing!')
                 print('Image size: ' + str(w) + ', ' + str(h))
                 print('Mask size is different: ' + str(wsi_mask.size[0])+', ' + str(wsi_mask.size[1]))
             # wsi_mask = wsi_mask.resize((w, h), Image.NEAREST)
             wsi_mask = np.asarray(wsi_mask)
-            wsi_mask = cv2.resize(wsi_mask, dsize=(w, h), interpolation=cv2.INTER_NEAREST)
-            if wsi_mask.size[0] != w or wsi_mask.size[1] == h:
-                print('Different size after resizing!')
-                print('Image size: ' + str(w) + ', ' + str(h))
-                print('Mask size is different: ' + str(wsi_mask.size[0])+', ' + str(wsi_mask.size[1]))
+            # wsi_mask = cv2.resize(wsi_mask, dsize=(w, h), interpolation=cv2.INTER_NEAREST)
+            # if wsi_mask.size[0] != w or wsi_mask.size[1] != h:
+            #     print('Different size after resizing!')
+            #     print('Image size: ' + str(w) + ', ' + str(h))
+            #     print('Mask size is different: ' + str(wsi_mask.size[0])+', ' + str(wsi_mask.size[1]))
             # wsi_mask = np.ones(shape=(10000, 10000))*255
-        except:
+        except Exception as inst:
             mask_too_big = True
             print('Failed to load wsi mask. wsi_mask: ' + wsi_name+'_annotation_mask.png')
+            print(inst)
     # take underscore out of wsi name
     wsi_name = wsi_name.split('_')[0] + wsi_name.split('_')[1]
 
@@ -227,7 +228,8 @@ def slice_image(wsi_path, args, index, return_dict):
                 patch = patch.convert("RGB")
                 name = wsi_name + '_' + str(row) + '_' + str(column) + '.jpg'
                 if positive_slide:
-                    patch_class = get_patch_class(wsi_mask[start_y:start_y + resolution, start_x:start_x + resolution], args.tumor_threshold)
+                    patch_mask = wsi_mask[start_y*2:(start_y+ resolution)*2, start_x*2:(start_x + resolution)*2]
+                    patch_class = get_patch_class(patch_mask, args.tumor_threshold)
                 else:
                     patch_class = 0
                 if contains_tissue(patch, otsu_threshold) or patch_class > 0:
