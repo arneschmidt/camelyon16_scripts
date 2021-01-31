@@ -62,13 +62,14 @@ def get_wsi_data_splits(image_dir, val_split):
     return wsi_data_split_lists, test_wsi_df
 
 def get_patch_class(patch_annotation, tumor_threshold):
+    assert patch_annotation.size > 0
     tumor_percent = np.sum(patch_annotation.astype(float) / 255.) / patch_annotation.size
     if tumor_percent > tumor_threshold:
         return 1
     else:
         return 0
 
-def contains_tissue(patch, otsu_threshold, white_threshold=0.2, blurr_threshold=50, greyscale_threshold=0.1, debug=False):
+def contains_tissue(patch, otsu_threshold, white_threshold=0.05, blurr_threshold=50, greyscale_threshold=0.01, debug=False):
     """
 
     :param patch:
@@ -186,10 +187,10 @@ def slice_image(wsi_path, args, index, return_dict):
             # wsi_mask = skimage.io.MultiImage(mask_path)[0]
             # wsi_mask = cv2.imread(mask_path)
             wsi_mask = Image.open(mask_path)
-            if wsi_mask.size[0] != w or wsi_mask.size[1] == h:
+            if wsi_mask.size[0] != w*2 or wsi_mask.size[1] == h*2:
                 print('Image size: ' + str(w) + ', ' + str(h))
                 print('Mask size is different: ' + str(wsi_mask.size[0])+', ' + str(wsi_mask.size[1]))
-            wsi_mask = wsi_mask.resize((w, h), Image.ANTIALIAS)
+            wsi_mask = wsi_mask.resize((w, h), Image.NEAREST)
             wsi_mask = np.asarray(wsi_mask)
             # wsi_mask = np.ones(shape=(10000, 10000))*255
         except:
@@ -200,8 +201,8 @@ def slice_image(wsi_path, args, index, return_dict):
 
     names = []
     classes = []
+    patch_df = pd.DataFrame(columns=['image_name', 'N', 'P', 'unlabeled'])
     if not mask_too_big:
-        patch_df = pd.DataFrame(columns=['image_name', 'N', 'P', 'unlabeled'])
         for row in range(num_patches_per_row):
             if row % 10 == 0 and args.debug:
                 print('row ' + str(row) + ' of ' + str(num_patches_per_row))
@@ -213,7 +214,9 @@ def slice_image(wsi_path, args, index, return_dict):
                     start_y = int(row*(resolution))
                     start_x = int(column*(resolution))
                 # the coordinates at level 1 have to be multiplied by 2, else we get an overlap
-                patch = wsi.read_region((start_y*2, start_x*2), level, (resolution, resolution))
+                assert start_x + resolution <= w # and start_x + resolution <= wsi_mask.size[0]
+                assert start_y + resolution <= h # and start_y + resolution <= wsi_mask.size[1]
+                patch = wsi.read_region((start_x*2, start_y*2), level, (resolution, resolution))
                 patch = patch.convert("RGB")
                 name = wsi_name + '_' + str(row) + '_' + str(column) + '.jpg'
                 if positive_slide:
@@ -227,7 +230,7 @@ def slice_image(wsi_path, args, index, return_dict):
                     if positive_slide:
                         classes.append(patch_class)
                 elif debug:
-                    if contains_tissue(patch, otsu_threshold, white_threshold=0.1, blurr_threshold=10, greyscale_threshold=0.0):
+                    if contains_tissue(patch, otsu_threshold, white_threshold=0.001, blurr_threshold=10, greyscale_threshold=0.0):
                         reason = contains_tissue(patch, otsu_threshold, debug=True)
                         path = os.path.join(image_path,'deleted_patches')
                         os.makedirs(path, exist_ok=True)
