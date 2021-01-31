@@ -191,12 +191,14 @@ def slice_image(wsi_path, args, index, return_dict):
             # wsi_mask = skimage.io.MultiImage(mask_path)[0]
             # wsi_mask = cv2.imread(mask_path)
             wsi_mask = Image.open(mask_path)
-            print(wsi_name + ' mask shape:' + str(wsi_mask.shape[0]) + ' ' + str(wsi_mask.shape[1]))
             if int(wsi_mask.size[0]) != int(w*2) or int(wsi_mask.size[1]) != int(h*2):
                 print('Different size before resizing!')
                 print('Image size: ' + str(w) + ', ' + str(h))
                 print('Mask size is different: ' + str(wsi_mask.size[0])+', ' + str(wsi_mask.size[1]))
             wsi_mask = np.asarray(wsi_mask)
+
+            print(wsi_name + ' mask shape:' + str(wsi_mask.shape[0]) + ' ' + str(wsi_mask.shape[1]))
+
 
         except Exception as inst:
             mask_too_big = True
