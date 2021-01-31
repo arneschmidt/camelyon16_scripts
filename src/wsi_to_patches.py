@@ -189,10 +189,15 @@ def slice_image(wsi_path, args, index, return_dict):
             # wsi_mask = cv2.imread(mask_path)
             wsi_mask = Image.open(mask_path)
             if wsi_mask.size[0] != w*2 or wsi_mask.size[1] == h*2:
+                print('Different size before resizing!')
                 print('Image size: ' + str(w) + ', ' + str(h))
                 print('Mask size is different: ' + str(wsi_mask.size[0])+', ' + str(wsi_mask.size[1]))
             wsi_mask = wsi_mask.resize((w, h), Image.NEAREST)
             wsi_mask = np.asarray(wsi_mask)
+            if wsi_mask.size[0] != w or wsi_mask.size[1] == h:
+                print('Different size after resizing!')
+                print('Image size: ' + str(w) + ', ' + str(h))
+                print('Mask size is different: ' + str(wsi_mask.size[0])+', ' + str(wsi_mask.size[1]))
             # wsi_mask = np.ones(shape=(10000, 10000))*255
         except:
             mask_too_big = True
